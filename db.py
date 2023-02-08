@@ -1,10 +1,12 @@
+import os
 import sqlite3 as sl
-import snscrape.modules.twitter as sntwitter
 import classes.db_schema as schema
 import classes.db_classes as classes
 
 class Database:
-    def __init__(self, db_name = 'database.db') -> None:
+    def __init__(self, db_name = None):
+        if db_name is None:
+            db_name = os.path.dirname(__file__) + "/database.db"
         self.db = sl.connect(db_name)
         self.execute(f"""
             CREATE TABLE IF NOT EXISTS {schema.User.table} (
@@ -22,14 +24,18 @@ class Database:
             );
         """)
 
-    def execute(self, command:str):
+    def execute(self, command:str, parameters : list = []):
         with self.db:
-            result = self.db.execute(command).fetchall()
+            result = self.db.execute(command, parameters).fetchall()
             return result
 
-    def add_user(self, user : classes.User):
+    def add_user(self, user : classes.User, cursor : sl.Cursor = None):
+        query = f"INSERT INTO {schema.User.table} VALUES({user.id}, '{user.name}')"
         try:
-            self.execute(f"INSERT INTO {schema.User.table} VALUES({user.id}, '{user.name}')")
+            if cursor is not None:
+                cursor.execute(query)
+                return [True, "OK"]
+            self.execute(query)
             return [True, "OK"]
         except sl.IntegrityError as e:
             return [False, str(e)]
@@ -62,9 +68,13 @@ class Database:
             WHERE {schema.User.id}  = {user.id}
         """)
 
-    def add_post(self, post : classes.Post):
+    def add_post(self, post : classes.Post, cursor : sl.Cursor = None):
+        query = f"INSERT INTO {schema.Post.table} VALUES({post.id}, {post.user_id}, ?, '{post.media}', {post.downloaded})"
         try:
-            self.execute(f"INSERT INTO {schema.Post.table} VALUES({post.id}, {post.user_id}, '{post.content}', '{post.media}', {post.downloaded})")
+            if cursor is not None:
+                cursor.execute(query, [post.content])
+                return [True, "OK"]
+            self.execute(query, [post.content])
             return [True, "OK"]
         except sl.IntegrityError as e:
             return [False, str(e)]
@@ -78,7 +88,7 @@ class Database:
         self.execute(f"""
             UPDATE {schema.Post.table}
             SET {schema.Post.media} = '{post.media}',
-                {schema.Post.content} = '{post.content}',
+                {schema.Post.content} = ?,
                 {schema.Post.downloaded} = {post.downloaded}
             WHERE {schema.Post.id}  = {post.id}
-        """)
+        """, [post.content])

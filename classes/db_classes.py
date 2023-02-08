@@ -1,4 +1,5 @@
 import snscrape.modules.twitter as sntwitter
+import re
 
 class Post:
     id : int
@@ -12,7 +13,7 @@ class Post:
             return None
         self.id = tweet.id
         self.user_id = tweet.user.id
-        self.content = tweet.rawContent.replace("'","''")
+        self.content = re.sub(r"https://t.co\S+", "", tweet.rawContent).strip()
         
         # media is saved in db as "url|file_format" string
         media_new = []

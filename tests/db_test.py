@@ -30,7 +30,7 @@ class TestDatabase(unittest.TestCase):
         t_post = classes.Post()
         t_post.id = 12345
         t_post.user_id = 6789
-        t_post.content = "Hello World"
+        t_post.content = "He'llo 'Worl’d"
         t_post.media = "jpg1|jpg,movie1|mp4"
         t_post.downloaded = 0
 
@@ -38,12 +38,12 @@ class TestDatabase(unittest.TestCase):
         self.assertFalse(connection.add_post(t_post)[0])
 
         result = connection.get_post(12345)
-        self.assertTrue(result.user_id == 6789 and result.downloaded == 0)
+        self.assertTrue(result.user_id == 6789 and result.content == "He'llo 'Worl’d" and result.downloaded == 0)
 
         t_post.downloaded = 1
         connection.update_post(t_post)
         result = connection.get_post(12345)
-        self.assertTrue(result.user_id == 6789 and result.downloaded == 1)
+        self.assertTrue(result.user_id == 6789 and result.content == "He'llo 'Worl’d" and result.downloaded == 1)
         
         result = connection.get_post(123456)
         self.assertTrue(result == None)

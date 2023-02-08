@@ -6,9 +6,13 @@ import os
 
 class TwitterScraper:
     db : Database
-    download_dir = "downloads"
+    download_dir = ""
 
-    def __init__(self, db:Database):
+    def __init__(self, db:Database, download_dir = None):
+        if download_dir == None:
+            self.download_dir = os.path.dirname(__file__) + "/downloads"
+        else:
+            self.download_dir = download_dir
         self.db = db
 
     def get_user(self, user_name : str = None, user_id : int = None, use_database = True, save_database = True) -> classes.User:
@@ -53,7 +57,8 @@ class TwitterScraper:
 
     def fetch_all_posts(self, user_name, new_only = False) -> int:
         """
-        updates database and returns number of new posts
+        updates database and returns number of new posts\n
+        uses Cursor to minimize database R/W
         """
         new_posts = 0
 
@@ -70,6 +75,8 @@ class TwitterScraper:
         user_posts = self.db.get_user_all_posts(user.id)
         for p in user_posts:
             cached_posts[p.id] = p.downloaded
+
+        con = self.db.db.cursor()
         scraper = sntwitter.TwitterUserScraper(user_name)
         for tweet in scraper.get_items():
             if tweet.media is None:
@@ -78,16 +85,19 @@ class TwitterScraper:
             if new_only and tweet.id in cached_posts:
                 break
             if tweet.id not in cached_posts:
-                self.db.add_post(twt)
+                self.db.add_post(twt, con)
                 new_posts += 1
+        con.close()
+        self.db.db.commit()
                 
         return new_posts
 
-    def download_all_posts(self, user_name, force_redownload = False, update_database = True, new_only = False, database_only = False):
+    def download_all_posts(self, user_name, force_redownload = False, update_database = True, new_only = False, database_only = False, reverse = False):
         """
         returns {"success", "fail", "skipped"} dictionary with numbers\n
         new_only - function will return if a post is already in database (only download new posts)\n
         database_only - do not check for new posts (only download from database)
+        reverse - only works for database_only mode. Posts are downloaded starting from the oldest.
         """
         if (database_only or update_database) and self.db is None:
             raise Exception("Can't use database without database.")
@@ -101,6 +111,7 @@ class TwitterScraper:
         cached_posts = {}
         if self.db is not None:
             user_posts = self.db.get_user_all_posts(user.id)
+            user_posts = sorted(user_posts, key=lambda x: x.id, reverse=reverse)
             for p in user_posts:
                 cached_posts[p.id] = p.downloaded
         
@@ -128,7 +139,7 @@ class TwitterScraper:
             for tweet in user_posts:
                 tweet : classes.Post
                 if force_redownload or tweet.downloaded == 0:
-                    result = self.download_media(twt, user, update_database)
+                    result = self.download_media(tweet, user, update_database)
                     if result[0] is True:
                         total["success"] += 1
                     else:
@@ -137,21 +148,30 @@ class TwitterScraper:
                     total["skipped"] += 1
         return total
 
-    def download_post(self, post_id : int, update_database = True) -> tuple[bool,list]:
+    def download_post(self, post_id : int = None, url : str = None, update_database = True) -> tuple[bool,list]:
         """
         Returns a tuple [success status, list of successfully downloaded files]
         """
         if update_database and self.db is None:
             raise Exception("Can't update database without database.")
+        if post_id is None and url is None:
+            raise Exception("No post_id or url provided")
 
-        post = self.get_post(post_id, save_database=update_database)
+        if url is not None:
+            splits = url.split("/")
+            for idx, split in enumerate(splits):
+                if split == "status":
+                    post_id = splits[idx+1]
+                    break
+            if post_id is None:
+                raise Exception("Provided url is invalid")
+
+        post = self.get_post(post_id, use_database=self.db is not None, save_database=update_database)
         if post is None:
             print(f"Post {post_id} does not exist")
             return [False, []]
-        if update_database:
-            self.db.add_post(post)
         
-        user = self.get_user(user_id=post.user_id)
+        user = self.get_user(user_id=post.user_id, use_database=self.db is not None, save_database=update_database)
         if user is None:
             print(f"User {post.user_id} does not exist")
             return [False, []]
@@ -170,7 +190,7 @@ class TwitterScraper:
         downloadedFiles = []
         for idx, media in enumerate(post.media.split(',')):
             splits = media.split('|') # media is saved in db as "url|file_format" string
-            file_path = os.path.join(self.download_dir, f"{user.id}_{user.name}/{post.id}_{idx}.{splits[1]}")
+            file_path = os.path.join(self.download_dir, f"{user.name}/{post.id}_{idx}.{splits[1]}")
             if DL.download(splits[0], file_path)[0] == False:
                 if update_database:
                     post.downloaded = 0
