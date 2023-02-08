@@ -36,5 +36,5 @@ tw.db = db
 # #cache posts and then download them starting from the oldest
 # for account in update_account_list():
 #     tw.fetch_all_posts(account)
-#     result = tw.download_all_posts(account, database_only=True, reverse=True)
+#     result = tw.download_all_posts(account, database_only=True, from_oldest=True)
 #     print(f'{account} - success: {result["success"]}, fail: {result["fail"]}, skipped: {result["skipped"]}')
