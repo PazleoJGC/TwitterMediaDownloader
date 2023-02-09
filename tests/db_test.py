@@ -1,14 +1,16 @@
 import unittest
 import sqlite3
 from db import Database as db
-import classes.db_classes as classes
+from classes.user import User
+from classes.post import Post
 
 class TestDatabase(unittest.TestCase):
     def test_user_CRUD(self):
         connection = db(':memory:')
-        t_user = classes.User()
+        t_user = User()
         t_user.id = 12345
         t_user.name = "Leon"
+        t_user.profileImageUrl = ""
 
         self.assertTrue(connection.add_user(t_user)[0])
         self.assertFalse(connection.add_user(t_user)[0])
@@ -27,11 +29,12 @@ class TestDatabase(unittest.TestCase):
 
     def test_post_CRUD(self):
         connection = db(':memory:')
-        t_post = classes.Post()
+        t_post = Post()
         t_post.id = 12345
         t_post.user_id = 6789
         t_post.content = "He'llo 'Worl’d"
         t_post.media = "jpg1|jpg,movie1|mp4"
+        t_post.date = ""
         t_post.downloaded = 0
 
         self.assertTrue(connection.add_post(t_post)[0])
@@ -48,13 +51,28 @@ class TestDatabase(unittest.TestCase):
         result = connection.get_post(123456)
         self.assertTrue(result == None)
 
+    def test_db_users(self):
+        connection = db(':memory:')
+        
+        for i in range(0, 20):
+            t_user = User()
+            t_user.id = 12345 + i
+            t_user.name = str(t_user.id)
+            t_user.profileImageUrl = ""
+            connection.add_user(t_user)
+
+        for i in range(0, 20):
+            self.assertNotEqual(connection.get_user(user_id=12345 + i), None)
+            self.assertNotEqual(connection.get_user(user_name=str(12345 + i)), None)
+
     def test_post_get_all(self):
         connection = db(':memory:')
-        t_post = classes.Post()
+        t_post = Post()
         t_post.id = 12345
         t_post.user_id = 6789
         t_post.content = "Hello World"
         t_post.media = "jpg1|jpg,movie1|mp4"
+        t_post.date = ""
         t_post.downloaded = 0
 
         for i in range(0, 10):

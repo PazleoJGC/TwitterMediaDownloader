@@ -1,14 +1,29 @@
 import os
-import classes.db_classes as classes
+from classes.post import Post
+from classes.user import User
 import nextcord
 from nextcord.ext import tasks, commands
 from twitterScraper import TwitterScraper
+import json
 
-discord_token = ""
-server_name = "aaa"
-channel_name = "twitter-media-bot"
-base_path = os.path.dirname(__file__) + "/discord/"
-tw = TwitterScraper(None, download_dir=base_path + "/temp/")
+settings ={ 
+  "discord_token": "example", 
+  "server_name": "example", 
+  "channel_name": "twitter-media-bot"
+} 
+
+if os.path.exists("discord_settings.json"):
+    with open("discord_settings.json", "rt") as f:
+        settings = json.loads(f.read())
+else:
+    with open("discord_settings.json", "wt") as f:
+        f.write(json.dumps(settings, indent = 4))
+    raise Exception("Settings file created. Fill all the values and restart the bot.")
+    
+discord_token = settings["discord_token"]
+server_name = settings["server_name"]
+channel_name = settings["channel_name"]
+downloads_path = os.path.dirname(__file__) + "/discord/downloads/"
 last_posts = {}
 
 intents = nextcord.Intents.default()
@@ -41,43 +56,44 @@ async def on_ready():
 
 @tasks.loop(minutes = 5)
 async def myLoop():
-    global tw
     global last_posts
     handles = update_account_list()
     for handle in handles:
         print(handle)
         if(handle.lower() not in last_posts):
-            latest_posts = tw.fetch_all_posts(user_name=handle, use_database=False, max_count=1)
+            latest_posts = TwitterScraper.fetch_posts_from_user(user_name=handle, max_count=1)
             if len(latest_posts) == 0:
                  continue
-            last_posts[handle.lower()] = latest_posts[0].id-1
-            print(handle, last_posts[handle.lower()])
-            #continue
-        posts = tw.fetch_all_posts(user_name=handle, use_database=False, newer_than=last_posts[handle.lower()])
+            last_posts[handle.lower()] = latest_posts[0].id
+        user = TwitterScraper.get_user(user_name=handle)
+        posts = TwitterScraper.fetch_posts_from_user(user_name=handle, newer_than=last_posts[handle.lower()])
         for post in sorted(posts, key=lambda x: x.id):
-            post : classes.Post
+            post : Post
             if post.id > last_posts[handle.lower()]:
                 last_posts[handle.lower()] = post.id
-            success, files = await send_post(post, handle, channel_name)
+            success, files = await send_post(post, user, channel_name)
             print(success, files)
             clean_up_files(files)
 
-async def send_post(post : classes.Post, handle, channel_name):
-    global tw
+async def send_post(post : Post, user : User, channel_name):
     mediaList = []
     try:
-        tweet = tw.get_post(post_id=post.id, use_database=False, save_database=False)
-        success, mediaList = tw.download_media(tweet, download_dir=base_path, update_database=False)
-        
+        success, mediaList = post.download_media(download_dir=downloads_path)
         if success:
-            url = f"https://twitter.com/{handle}/status/{tweet.id}"
-            embed=nextcord.Embed(description=tweet.content, url=url)
+            url = f"https://twitter.com/{user.name}/status/{post.id}"
+
+            embed=nextcord.Embed(description=post.content)
+            if user.profileImageUrl == "":
+                embed.set_author(name=user.name, url=url)
+            else:
+                embed.set_author(name=user.name, url=url, icon_url=user.profileImageUrl)
+            embed.set_footer(text=post.date)
             
-            for guild in client.guilds:
-                channel = nextcord.utils.get(guild.channels, name = channel_name)
-                if channel is None:
-                    channel = await guild.create_text_channel(channel_name)
-                await channel.send(embed=embed, files=[nextcord.File(x) for x in mediaList])
+            guild = nextcord.utils.get(client.guilds, name = server_name)
+            channel = nextcord.utils.get(guild.channels, name = channel_name)
+            if channel is None:
+                channel = await guild.create_text_channel(channel_name)
+            await channel.send(embed=embed, files=[nextcord.File(x) for x in mediaList])
                 
             return True, mediaList
         else:

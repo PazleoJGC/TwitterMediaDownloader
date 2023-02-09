@@ -2,3 +2,4 @@ downloads/
 AccountNames.txt
 database.db
 *__pycache__*
+discord_settings.json
