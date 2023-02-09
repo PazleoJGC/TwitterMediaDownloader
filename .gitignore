@@ -1,5 +1,6 @@
 downloads/
+discord/
 AccountNames.txt
 database.db
 *__pycache__*
-database.db-journal
+discord_settings.json
